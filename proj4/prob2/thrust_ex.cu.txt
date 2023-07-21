@@ -1,0 +1,47 @@
+%%writefile thrust_ex.cu
+#include <stdio.h>
+#include <cuda_runtime.h>
+#include <thrust/device_vector.h>
+#include <thrust/reduce.h>
+
+long num_steps = 1000000000;
+double step;
+
+struct functor {
+    double step;
+    functor(double _step) : step(_step) {}
+
+    __device__ double operator()(const long& i) const {
+        double x = (i + 0.5) * step;
+        return 4.0 / (1.0 + x * x);
+    }
+};
+
+int main() {
+    thrust::device_vector<double> dev_sum(num_steps);
+
+    step = 1.0 / (double)num_steps;
+
+    float diff;
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    cudaEventRecord(start);
+
+    thrust::counting_iterator<long> iter(0);
+    thrust::transform(iter, iter + num_steps, dev_sum.begin(), functor(step));
+    double pi = step * thrust::reduce(dev_sum.begin(), dev_sum.end());
+
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&diff, start, stop);
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    printf("execution time: %.10lf sec\n", diff / 1000.0);
+    printf("pi=%.10lf\n", pi);
+
+    return 0;
+}
